@@ -63,7 +63,7 @@ Requires Android 8/API 26 or later and a WebView supporting `WEB_MESSAGE_LISTENE
 Host the standalone file `sdk/native-web-network.js` on your HTTPS hosting and include it on any website. The Android AAR contains only the native bridge and transport; it neither bundles nor injects this SDK. Loading a second copy of the SDK is idempotent. Automated tests include the standalone file in their test APK assets and serve it as a separate HTTPS script fixture; this asset is absent from production packages.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Craftynor-Studio/native-web-network@0.1.0/dist/native-web-network.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Craftynor-Studio/native-web-network@main/sdk/native-web-network.js"></script>
 <script>
 async function loadData() {
     if (!window.NativeWebNetwork?.available) {
@@ -77,6 +77,8 @@ async function loadData() {
 }
 </script>
 ```
+
+The CDN example follows the current `main` branch. You can also host `sdk/native-web-network.js` on your own HTTPS server. For future releases, pin a new release tag when you need a fixed SDK version.
 
 `NativeWebNetwork` is the SDK's public global. `.available` indicates bridge support; authorization still depends on the consuming app's policy. The SDK reports `UNAVAILABLE` outside a compatible app; an app policy can return `PERMISSION_DENIED` or `BLOCKED`.
 
@@ -134,4 +136,4 @@ Build an AAR, sources and Maven metadata from the repository root:
 
 The AAR is generated in `build/outputs/aar`. `publishReleasePublicationToLocalBuildRepository` generates an uploadable Maven repository in `build/repository`; local builds use the group `com.craftynorstudio`.
 
-JitPack uses the checked-in `jitpack.yml`, Java 21 and the Git release tag to publish `com.github.Craftynor-Studio:native-web-network`. Edit the website SDK in `sdk/native-web-network.js`; builds synchronize its hosted distribution in `dist/native-web-network.js`. Commit that distribution with SDK changes before publishing. Consumer apps install the published dependency independently of this repository.
+JitPack uses the checked-in `jitpack.yml`, Java 21 and the Git release tag to publish `com.github.Craftynor-Studio:native-web-network`. The website SDK is maintained and hosted directly from `sdk/native-web-network.js`. Consumer apps install the published dependency independently of this repository.
