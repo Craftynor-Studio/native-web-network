@@ -85,7 +85,7 @@ class NativeWebNetworkTest {
         page()
         evaluate("fetch('https://target.test/data').then(()=>window.testResult='unexpected').catch(()=>window.testResult='cors')")
         assertEquals("cors", result()); evaluate("window.testResult=null")
-        evaluate("BrowseTube.network.fetch('https://target.test/data').then(async r=>window.testResult=JSON.stringify({status:r.status,url:r.url,header:r.headers.get('x-test'),data:await r.json()})).catch(e=>window.testResult=e.code)")
+        evaluate("NativeWebNetwork.fetch('https://target.test/data').then(async r=>window.testResult=JSON.stringify({status:r.status,url:r.url,header:r.headers.get('x-test'),data:await r.json()})).catch(e=>window.testResult=e.code)")
         val value = JSONObject(result())
         assertEquals(203, value.getInt("status")); assertEquals("yes", value.getString("header"))
         assertEquals("नमस्ते", value.getJSONObject("data").getString("text"))

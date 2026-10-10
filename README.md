@@ -1,6 +1,6 @@
 # Native Web Network 0.1.0
 
-By **Craftynor Studio**, licensed under MIT. Native package: `com.craftynorstudio.nativewebnetwork`.
+Maintained by **Craftynor Studio**. Licensed under MIT. Native package: `com.craftynorstudio.nativewebnetwork`.
 
 An independent Android library plus a standalone JavaScript SDK. Websites call a Promise-based API; the embedded Android module makes HTTPS requests and returns readable responses without browser CORS enforcement. It does not replace the website's normal `fetch` or XMLHttpRequest.
 
@@ -20,31 +20,17 @@ implementation("com.github.Craftynor-Studio:native-web-network:0.1.0")
 
 Import `com.craftynorstudio.nativewebnetwork.NativeWebNetwork` and its policy interfaces.
 
-BrowseTube consumes the published JitPack dependency. When developing the library locally, use `implementation(project(":native-web-network"))` instead.
-
-Build an AAR and a Maven repository with:
-
-```powershell
-.\gradlew.bat :native-web-network:publishReleasePublicationToLocalBuildRepository
-```
-
-The repository is generated under `native-web-network/build/repository`. Another Android project can use it directly, or you can upload its contents to your own Maven server:
-
-```kotlin
-// settings.gradle.kts, inside dependencyResolutionManagement.repositories
-maven { url = uri("/absolute/path/to/native-web-network/build/repository") }
-
-// consuming module build.gradle.kts
-implementation("com.craftynorstudio:native-web-network:0.1.0")
-```
-
-Publishing generates the AAR, source JAR, standalone `-sdk.js` artifact and dependency metadata. A manually copied AAR requires declaring its AndroidX WebKit, OkHttp and kotlinx-coroutines dependencies separately; prefer the Maven dependency.
+The Maven dependency includes the AndroidX WebKit, OkHttp and kotlinx-coroutines dependency metadata. Requires Android 8/API 26+, Java 21 and a WebView supporting `WEB_MESSAGE_LISTENER`.
 
 ## Android integration
 
 Create one bridge per WebView, on its UI thread, before loading a document:
 
 ```kotlin
+import com.craftynorstudio.nativewebnetwork.NativeWebNetwork
+import com.craftynorstudio.nativewebnetwork.NativeNetworkAuthorizer
+import com.craftynorstudio.nativewebnetwork.NativeNetworkRequestGate
+
 val network = NativeWebNetwork(
     webView,
     authorizer = NativeNetworkAuthorizer { access ->
@@ -68,7 +54,7 @@ network.cancelRequests()
 network.close()
 ```
 
-The default access policy denies every request. BrowseTube deliberately enables public HTTPS access for its active foreground tab, with no user prompts, and runs every request/redirect through the tab's ad and tracking blocker. No access policy can bypass the library's public-address and credential rules. Do not determine a calling frame's identity from a JavaScript payload: the library uses WebView's `sourceOrigin` and rejects subframes.
+The default access policy denies every request. The consuming app supplies its own source/destination policy and optional request gate. Both apply again to redirects. The library has no built-in UI. No access policy can bypass the library's public-address and credential rules. The library uses WebView's `sourceOrigin` to identify the calling document and rejects subframes.
 
 Requires Android 8/API 26 or later and a WebView supporting `WEB_MESSAGE_LISTENER`. Feature support is checked at runtime. Unsupported WebViews get no legacy JavaScript-interface fallback.
 
@@ -77,7 +63,7 @@ Requires Android 8/API 26 or later and a WebView supporting `WEB_MESSAGE_LISTENE
 Host the standalone file `sdk/native-web-network.js` on your HTTPS hosting and include it on any website. The Android AAR contains only the native bridge and transport; it neither bundles nor injects this SDK. Loading a second copy of the SDK is idempotent. Automated tests include the standalone file in their test APK assets and serve it as a separate HTTPS script fixture; this asset is absent from production packages.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Craftynor-Studio/native-web-network@0.1.0/sdk/native-web-network.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Craftynor-Studio/native-web-network@0.1.0/dist/native-web-network.js"></script>
 <script>
 async function loadData() {
     if (!window.NativeWebNetwork?.available) {
@@ -92,7 +78,7 @@ async function loadData() {
 </script>
 ```
 
-`BrowseTube.network` is an alias of `NativeWebNetwork`. `.available` indicates bridge support, not that every destination is authorized by the app. The SDK reports `UNAVAILABLE` outside a compatible app; an app policy can return `PERMISSION_DENIED` or `BLOCKED`.
+`NativeWebNetwork` is the SDK's public global. `.available` indicates bridge support; authorization still depends on the consuming app's policy. The SDK reports `UNAVAILABLE` outside a compatible app; an app policy can return `PERMISSION_DENIED` or `BLOCKED`.
 
 ```javascript
 const controller = new AbortController();
@@ -118,10 +104,16 @@ Supported methods: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS. Supported bo
 - Top-frame messages only. Navigation, inactive tabs, backgrounding and destruction cancel work. Native replies use the originating frame's reply channel rather than JavaScript string interpolation.
 - Server authentication, bot checks, rate limits and server-side Origin validation still apply. This API does not make every endpoint accessible.
 
-## Verification
+## Development and tests
+
+Clone this repository and open its root directly in Android Studio, or use the included Gradle wrapper. The repository is a standalone Android library project. Use JDK 21 and Android SDK 36.
+
+From the repository root:
 
 ```powershell
-.\gradlew.bat :native-web-network:testDebugUnitTest :native-web-network:connectedDebugAndroidTest
+.\gradlew.bat testDebugUnitTest assembleRelease
+# With a connected Android device or emulator:
+.\gradlew.bat connectedDebugAndroidTest
 ```
 
 Unit tests cover URL/header/body validation, reserved IPv4/IPv6, app-policy denial, tracker rejection, redirect policy and credentials, bounded responses, cancellation and timeouts. WebView tests cover cross-origin native responses, Unicode POST bodies, SDK feature detection/remote inclusion, subframe rejection, cancellation, concurrency and document cleanup using isolated fixtures.
@@ -129,15 +121,17 @@ Unit tests cover URL/header/body validation, reserved IPv4/IPv6, app-policy deni
 An optional live test uses the real native HTTPS transport to read Google's public autocomplete response. Enable it explicitly so ordinary fixture tests remain independent of external servers:
 
 ```powershell
-.\gradlew.bat :native-web-network:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=com.craftynorstudio.nativewebnetwork.NativeWebNetworkTest#livePublicHttpsRequestUsesTheRealNativeTransport' '-Pandroid.testInstrumentationRunnerArguments.nativeNetworkLive=true'
+.\gradlew.bat connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=com.craftynorstudio.nativewebnetwork.NativeWebNetworkTest#livePublicHttpsRequestUsesTheRealNativeTransport' '-Pandroid.testInstrumentationRunnerArguments.nativeNetworkLive=true'
 ```
-
-Verified on the Studio emulator: 11 library unit tests and seven WebView fixture tests pass; the separate live HTTPS test also passes. An isolated consumer compiles using only `com.craftynorstudio:native-web-network:0.1.0` from the generated Maven repository. Archive checks confirm the AAR and BrowseTube APK contain no website SDK assets.
-
-BrowseTube builds successfully with no lint errors and its 70 JVM tests pass. Browser regressions pass; after correcting JSON-null redirect handling, all nine protection integration tests pass, including ordinary native requests, blocked-request counts and site exceptions.
 
 ## Publishing
 
-The standalone repository contains only this library, SDK and Gradle wrapper. Run `./gradlew testDebugUnitTest assembleRelease publishToMavenLocal` to verify it. JitPack uses Java 21 and publishes the release named by the Git tag. SDK URLs pin that same tag. Do not retag a released version; increment the version for changes.
+Build an AAR, sources and Maven metadata from the repository root:
 
-Within the BrowseTube workspace, regenerate the isolated publication project with `./native-web-network/publishing/prepare.ps1`. Its explicit file allowlist excludes the browser app, local paths, credentials, logs and generated output.
+```sh
+./gradlew testDebugUnitTest assembleRelease publishToMavenLocal
+```
+
+The AAR is generated in `build/outputs/aar`. `publishReleasePublicationToLocalBuildRepository` generates an uploadable Maven repository in `build/repository`; local builds use the group `com.craftynorstudio`.
+
+JitPack uses the checked-in `jitpack.yml`, Java 21 and the Git release tag to publish `com.github.Craftynor-Studio:native-web-network`. Edit the website SDK in `sdk/native-web-network.js`; builds synchronize its hosted distribution in `dist/native-web-network.js`. Commit that distribution with SDK changes before publishing. Consumer apps install the published dependency independently of this repository.

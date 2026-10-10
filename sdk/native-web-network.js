@@ -113,6 +113,4 @@
     });
     const sdk = Object.freeze({ version: '0.1.0', available: !!bridge, fetch: nativeFetch });
     root.NativeWebNetwork = sdk;
-    root.BrowseTube = root.BrowseTube || {};
-    root.BrowseTube.network = sdk;
 })(window);

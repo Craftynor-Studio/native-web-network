@@ -32,6 +32,11 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
+val syncSdk by tasks.registering(Copy::class) {
+    from("sdk/native-web-network.js")
+    into("dist")
+}
+tasks.named("preBuild") { dependsOn(syncSdk) }
 publishing {
     repositories { maven { name = "LocalBuild"; url = uri(layout.buildDirectory.dir("repository")) } }
     publications {
