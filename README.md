@@ -106,26 +106,6 @@ Supported methods: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS. Supported bo
 - Top-frame messages only. Navigation, inactive tabs, backgrounding and destruction cancel work. Native replies use the originating frame's reply channel rather than JavaScript string interpolation.
 - Server authentication, bot checks, rate limits and server-side Origin validation still apply. This API does not make every endpoint accessible.
 
-## Development and tests
-
-Clone this repository and open its root directly in Android Studio, or use the included Gradle wrapper. The repository is a standalone Android library project. Use JDK 21 and Android SDK 36.
-
-From the repository root:
-
-```powershell
-.\gradlew.bat testDebugUnitTest assembleRelease
-# With a connected Android device or emulator:
-.\gradlew.bat connectedDebugAndroidTest
-```
-
-Unit tests cover URL/header/body validation, reserved IPv4/IPv6, app-policy denial, tracker rejection, redirect policy and credentials, bounded responses, cancellation and timeouts. WebView tests cover cross-origin native responses, Unicode POST bodies, SDK feature detection/remote inclusion, subframe rejection, cancellation, concurrency and document cleanup using isolated fixtures.
-
-An optional live test uses the real native HTTPS transport to read Google's public autocomplete response. Enable it explicitly so ordinary fixture tests remain independent of external servers:
-
-```powershell
-.\gradlew.bat connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.class=com.craftynorstudio.nativewebnetwork.NativeWebNetworkTest#livePublicHttpsRequestUsesTheRealNativeTransport' '-Pandroid.testInstrumentationRunnerArguments.nativeNetworkLive=true'
-```
-
 ## Publishing
 
 Build an AAR, sources and Maven metadata from the repository root:
