@@ -20,7 +20,7 @@ implementation("com.github.Craftynor-Studio:native-web-network:0.1.0")
 
 Import `com.craftynorstudio.nativewebnetwork.NativeWebNetwork` and its policy interfaces.
 
-BrowseTube consumes the module with `implementation(project(":native-web-network"))`.
+BrowseTube consumes the published JitPack dependency. When developing the library locally, use `implementation(project(":native-web-network"))` instead.
 
 Build an AAR and a Maven repository with:
 
