@@ -1,107 +1,165 @@
-# Native Web Network 0.1.0
+# Native Web Network
 
-Maintained by **Craftynor Studio**. Licensed under MIT. Native package: `com.craftynorstudio.nativewebnetwork`.
+An Android WebView networking library and hosted JavaScript SDK maintained by **Craftynor Studio**.
 
-An independent Android library plus a standalone JavaScript SDK. Websites call a Promise-based API; the embedded Android module makes HTTPS requests and returns readable responses without browser CORS enforcement. It does not replace the website's normal `fetch` or XMLHttpRequest.
+Android apps add the library and define which websites and destinations can make native HTTPS requests. Websites load the hosted SDK and use `NativeWebNetwork.fetch()` to receive a standard JavaScript `Response`.
 
-No permission dialogs, settings screens, or other UI are included. Access is controlled by the consuming app's policy, and sites feature-detect support.
+The native transport does not apply browser CORS checks. Access remains subject to the app's policy and the destination server's authentication and request rules. The library provides no permission dialogs or other UI.
 
-## Android dependency
+## Requirements
 
-Public release coordinates (JitPack):
+- Android 8.0 / API 26 or later.
+- Java 21 and Android SDK 36 for Android integration.
+- Android System WebView with `WEB_MESSAGE_LISTENER` support.
+- An HTTPS website running in the WebView's top-level frame, with JavaScript enabled.
+
+## Android installation
+
+Add JitPack to your repositories in `settings.gradle.kts`:
 
 ```kotlin
-// settings.gradle.kts, inside dependencyResolutionManagement.repositories
-maven { url = uri("https://jitpack.io") }
-
-// consuming module build.gradle.kts
-implementation("com.github.Craftynor-Studio:native-web-network:0.1.0")
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://jitpack.io")
+    }
+}
 ```
 
-Import `com.craftynorstudio.nativewebnetwork.NativeWebNetwork` and its policy interfaces.
+Add the dependency to your app's `build.gradle.kts`:
 
-The Maven dependency includes the AndroidX WebKit, OkHttp and kotlinx-coroutines dependency metadata. Requires Android 8/API 26+, Java 21 and a WebView supporting `WEB_MESSAGE_LISTENER`.
+```kotlin
+dependencies {
+    implementation("com.github.Craftynor-Studio:native-web-network:0.1.0")
+}
+```
 
 ## Android integration
 
-Create one bridge per WebView, on its UI thread, before loading a document:
+Create one bridge per WebView on its UI thread, before loading your website. Replace the example origins with the website and API you want to authorize:
 
 ```kotlin
-import com.craftynorstudio.nativewebnetwork.NativeWebNetwork
+import android.graphics.Bitmap
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.craftynorstudio.nativewebnetwork.NativeNetworkAuthorizer
-import com.craftynorstudio.nativewebnetwork.NativeNetworkRequestGate
+import com.craftynorstudio.nativewebnetwork.NativeWebNetwork
+
+webView.settings.javaScriptEnabled = true
 
 val network = NativeWebNetwork(
-    webView,
-    authorizer = NativeNetworkAuthorizer { access ->
-        // App-owned policy. Called again for each redirect destination.
-        access.sourceOrigin == "https://my-site.example" &&
-            access.targetOrigin == "https://api.example"
-    },
-    gate = NativeNetworkRequestGate { url ->
-        // Return a rejection reason when your ad/tracker blocker denies this URL.
-        null
+    webView = webView,
+    authorizer = NativeNetworkAuthorizer { request ->
+        request.sourceOrigin == "https://your-site.example" &&
+            request.targetOrigin == "https://api.example"
     },
 )
 
-// Inside your existing WebViewClient.onPageStarted:
-network.onPageStarted()
+webView.webViewClient = object : WebViewClient() {
+    override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+        network.onPageStarted()
+    }
+}
 
-// When a tab becomes inactive or the app goes into the background:
-network.cancelRequests()
-
-// Before destroying the WebView:
-network.close()
+webView.loadUrl("https://your-site.example")
 ```
 
-The default access policy denies every request. The consuming app supplies its own source/destination policy and optional request gate. Both apply again to redirects. The library has no built-in UI. No access policy can bypass the library's public-address and credential rules. The library uses WebView's `sourceOrigin` to identify the calling document and rejects subframes.
+If your app already has a `WebViewClient`, add `network.onPageStarted()` to its existing callback.
 
-Requires Android 8/API 26 or later and a WebView supporting `WEB_MESSAGE_LISTENER`. Feature support is checked at runtime. Unsupported WebViews get no legacy JavaScript-interface fallback.
+The default authorizer denies every request. Your authorizer receives the calling website's origin, the destination origin and the HTTP method. It is also checked for each redirect. You can supply an optional `NativeNetworkRequestGate` to apply a request blocker; returning a reason rejects the request, and returning `null` allows it to continue.
 
-## Website SDK
+Connect the bridge to your WebView's lifecycle:
 
-Host the standalone file `sdk/native-web-network.js` on your HTTPS hosting and include it on any website. The Android AAR contains only the native bridge and transport; it neither bundles nor injects this SDK. Loading a second copy of the SDK is idempotent. Automated tests include the standalone file in their test APK assets and serve it as a separate HTTPS script fixture; this asset is absent from production packages.
+| When | Call |
+| --- | --- |
+| A navigation starts | `network.onPageStarted()` |
+| The WebView becomes inactive or the app enters the background | `network.cancelRequests()` |
+| Before destroying the WebView | `network.close()` |
+
+Use `network.supported` to check native bridge support. Unsupported WebViews do not receive a legacy JavaScript-interface fallback.
+
+## Website integration
+
+Include the hosted SDK on your HTTPS page:
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/Craftynor-Studio/native-web-network@main/sdk/native-web-network.js"></script>
-<script>
-async function loadData() {
-    if (!window.NativeWebNetwork?.available) {
-        // Use your website's normal request path in other browsers.
-        return;
-    }
-    const response = await NativeWebNetwork.fetch('https://api.example/data');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
-    console.log(data);
-}
-</script>
 ```
 
-The CDN example follows the current `main` branch. You can also host `sdk/native-web-network.js` on your own HTTPS server. For future releases, pin a new release tag when you need a fixed SDK version.
+The SDK is hosted through jsDelivr; no separate hosting setup is required. This URL follows the maintained `main` branch and can receive SDK updates.
 
-`NativeWebNetwork` is the SDK's public global. `.available` indicates bridge support; authorization still depends on the consuming app's policy. The SDK reports `UNAVAILABLE` outside a compatible app; an app policy can return `PERMISSION_DENIED` or `BLOCKED`.
+Check support before making a request:
+
+```javascript
+async function loadData() {
+    if (!window.NativeWebNetwork?.available) {
+        // Use your website's usual request path or fallback.
+        return null;
+    }
+
+    const response = await NativeWebNetwork.fetch("https://api.example/data");
+
+    if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+    }
+
+    return response.json();
+}
+```
+
+The native library must be installed and enabled by the Android app. Loading the script in an ordinary browser does not add native networking. `available` confirms bridge support; each request still needs authorization from the app.
+
+## Requests and responses
+
+Pass request options as the second argument. For example, send JSON with cancellation support:
 
 ```javascript
 const controller = new AbortController();
-const response = await NativeWebNetwork.fetch('https://api.example/data', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: 'hello' }),
+
+const response = await NativeWebNetwork.fetch("https://api.example/data", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: "hello" }),
     signal: controller.signal,
-    credentials: 'omit',
+    credentials: "omit",
 });
-// controller.abort() cancels the underlying native request.
+
+const data = await response.json();
+// Call controller.abort() while a request is pending to cancel it.
 ```
 
-The result is a browser `Response` with status, statusText, headers, final URL, redirected flag, and text/JSON/Blob/ArrayBuffer readers. HTTP error statuses resolve normally; transport, policy and validation failures reject with a `NativeNetworkError` carrying a `.code`. Cancellation uses `AbortError` and code `ABORTED`.
+The returned `Response` provides `status`, `statusText`, `headers`, `url`, `redirected`, and the usual `text()`, `json()`, `blob()` and `arrayBuffer()` readers. HTTP error responses resolve normally, so check `response.ok`.
 
-Supported methods: GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS. Supported bodies: strings, URLSearchParams, Blob, ArrayBuffer and typed byte views. Request objects, FormData, streaming bodies, service workers and WebSockets are outside version 1. Redirects are followed manually, rechecking policy, HTTPS and blocking rules; cross-origin redirects remove Authorization, and standard 301/302/303 POST rewrites remove body-related headers.
+Supported methods are GET, HEAD, POST, PUT, PATCH, DELETE and OPTIONS. Supported bodies are strings, `URLSearchParams`, `Blob`, `ArrayBuffer` and typed array views. Redirects use `follow`; app authorization and request gates are checked again at each destination.
 
-## Boundaries
+Request objects, `FormData`, streaming bodies, service workers and WebSockets are not supported in version 0.1.0. The SDK does not replace the page's normal `fetch()` or `XMLHttpRequest`.
 
-- No WebView cookies or native cookie jar. Cookie, Host, Origin, Referer, proxy and connection-control request headers are rejected. Set-Cookie is neither exposed nor saved. A website may supply its own Authorization header explicitly.
-- HTTPS with normal certificate/hostname verification. No HTTP downgrade, URL credentials, proxy access, localhost, private/link-local IPs, or reserved addresses. DNS results are checked and the exact checked addresses are used for the connection.
-- Defaults: 256 KiB request body, 2 MiB response body, four active requests per tab, five redirects and a shared 15-second transfer budget. Responses are buffered; this is for API data rather than media downloads. The SDK bounds outstanding work at 60 seconds.
-- Top-frame messages only. Navigation, inactive tabs, backgrounding and destruction cancel work. Native replies use the originating frame's reply channel rather than JavaScript string interpolation.
-- Server authentication, bot checks, rate limits and server-side Origin validation still apply. This API does not make every endpoint accessible.
+## Error handling
+
+Transport, validation and policy failures reject the promise. Errors include a `code` property:
+
+| Code | Meaning |
+| --- | --- |
+| `UNAVAILABLE` | A compatible native bridge is unavailable. |
+| `PERMISSION_DENIED` | The Android app's access policy rejected the request. |
+| `BLOCKED` | The app's request gate blocked the URL. |
+| `PRIVATE_ADDRESS` | The destination uses a local, private or reserved address. |
+| `TIMEOUT` | The request exceeded its time limit. |
+| `REQUEST_TOO_LARGE` / `RESPONSE_TOO_LARGE` | A transfer exceeded its size limit. |
+| `ABORTED` | The request was cancelled or its page closed. |
+
+Cancellation errors use the name `AbortError`; other library errors use `NativeNetworkError`.
+
+## Request limits and privacy
+
+- Requests use HTTPS with standard certificate and hostname validation. URL credentials, localhost, private networks and reserved addresses are rejected.
+- Browser cookies are not shared, native cookies are not stored, and `Set-Cookie` is not exposed. Use `credentials: "omit"`. Explicit `Authorization` headers are supported and removed on cross-origin redirects.
+- Cookie, Host, Origin, Referer, proxy and connection-control request headers cannot be supplied by the website.
+- Default native limits are a 256 KiB request body, a 2 MiB response body, four concurrent requests per WebView, five redirects and a shared 15-second transfer budget. Android apps can configure native limits through `NativeNetworkConfig`; the SDK limits request bodies to 256 KiB and pending requests to 60 seconds.
+- Responses are buffered. This API is intended for API data rather than streaming media or large file downloads.
+- Navigation, page closure, inactive WebViews and app lifecycle hooks cancel outstanding work. Only the top-level website frame can use the bridge.
+
+## License
+
+[MIT](LICENSE) — maintained by Craftynor Studio.
